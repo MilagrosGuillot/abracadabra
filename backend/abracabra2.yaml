@@ -1,0 +1,207 @@
+# =============================
+# ConfigMap
+# =============================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: variables
+data:
+  POSTGRES_USER: user
+  POSTGRES_DB: abracadabra
+  POSTGRES_PORT: "5432"
+
+---
+# =============================
+# Secret
+# =============================
+apiVersion: v1
+kind: Secret
+metadata:
+  name: secretos
+type: Opaque
+data:
+  POSTGRES_PASSWORD: cGFzc3dvcmQxMjM=
+
+---
+# =============================
+# Pod PostgreSQL (NO Deployment)
+# =============================
+apiVersion: v1
+kind: Pod
+metadata:
+  name: db-postgres
+  labels:
+    app: db-postgres
+spec:
+  containers:
+    - name: postgres
+      image: docker.io/postgres:15
+      ports:
+        - containerPort: 5432
+      env:
+        - name: POSTGRES_USER
+          valueFrom:
+            configMapKeyRef:
+              name: variables
+              key: POSTGRES_USER
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: secretos
+              key: POSTGRES_PASSWORD
+        - name: POSTGRES_DB
+          valueFrom:
+            configMapKeyRef:
+              name: variables
+              key: POSTGRES_DB
+
+---
+# =============================
+# Service PostgreSQL
+# =============================
+apiVersion: v1
+kind: Service
+metadata:
+  name: db-service
+spec:
+  type: NodePort
+  selector:
+    app: db-postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
+      nodePort: 30010
+
+---
+# =============================
+# Pod Backend
+# =============================
+apiVersion: v1
+kind: Pod
+metadata:
+  name: back-abracadabra
+  labels:
+    app: back-abracadabra
+spec:
+  containers:
+    - name: backend
+      image: ghcr.io/milagrosguillot/back-abracadabra:v1
+      imagePullPolicy: Always
+      ports:
+        - containerPort: 3001
+      env:
+        - name: DB_HOST
+          value: "db-service"
+        - name: DB_PORT
+          value: "5432"
+        - name: DB_USER
+          value: "user"
+        - name: DB_PASS
+          valueFrom:
+            secretKeyRef:
+              name: secretos
+              key: POSTGRES_PASSWORD
+        - name: DB_NAME
+          value: "abracadabra"
+        - name: PORT
+          value: "3001"
+        - name: CORS_ORIGIN
+          value: "http://frontend.k3s.local"
+
+---
+# =============================
+# Service Backend
+# =============================
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-service
+spec:
+  type: NodePort
+  selector:
+    app: back-abracadabra
+  ports:
+    - port: 80
+      targetPort: 3001
+      nodePort: 30011
+
+---
+# =============================
+# Pod Frontend
+# =============================
+apiVersion: v1
+kind: Pod
+metadata:
+  name: front-abracadabra
+  labels:
+    app: front-abracadabra
+spec:
+  containers:
+    - name: frontend
+      image: ghcr.io/milagrosguillot/front-abracadabra:v1
+      imagePullPolicy: Always
+      ports:
+        - containerPort: 3000
+      env:
+        - name: NEXT_PUBLIC_API_URL
+          value: "http://backend.k3s.local:30011/frases"
+
+---
+# =============================
+# Service Frontend
+# =============================
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-service
+spec:
+  type: NodePort
+  selector:
+    app: front-abracadabra
+  ports:
+    - port: 80
+      targetPort: 3000
+      nodePort: 30012
+
+---
+# =============================
+# Ingress Frontend
+# =============================
+
+# apiVersion: networking.k8s.io/v1
+# kind: Ingress
+# metadata:
+#   name: frontend-ingress
+# spec:
+#   rules:
+#     - host: frontend-service
+#       http:
+#         paths:
+#           - pathType: Prefix
+#             path: /
+#             backend:
+#               service:
+#                 name: frontend-service
+#                 port:
+#                   number: 80
+
+# ---
+# # =============================
+# # Ingress Backend
+# # =============================
+# apiVersion: networking.k8s.io/v1
+# kind: Ingress
+# metadata:
+#   name: backend-ingress
+# spec:
+#   rules:
+#     - host: backend-service
+#       http:
+#         paths:
+#           - pathType: Prefix
+#             path: /
+#             backend:
+#               service:
+#                 name: backend-service
+#                 port:
+#                   number: 80

@@ -1,0 +1,240 @@
+# =============================
+# ConfigMap
+# =============================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: variables
+data:
+  POSTGRES_USER: user
+  POSTGRES_DB: abracadabra
+  POSTGRES_PORT: "5433"
+
+---
+# =============================
+# Secret
+# =============================
+apiVersion: v1
+kind: Secret
+metadata:
+  name: secretos
+type: Opaque
+data:
+  POSTGRES_PASSWORD: cGFzc3dvcmQxMjM=  # "password123" en base64
+
+---
+# =============================
+# Persistent Volume Claim para PostgreSQL
+# =============================
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+
+---
+# =============================
+# Deployment PostgreSQL
+# =============================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: db-postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: db-postgres
+  template:
+    metadata:
+      labels:
+        app: db-postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: variables
+                  key: POSTGRES_USER
+
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: variables
+                  key: POSTGRES_DB
+
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: secretos
+                  key: POSTGRES_PASSWORD
+
+            - name: PGPORT
+              value: "5433"
+
+          ports:
+            - containerPort: 5433
+
+          volumeMounts:
+            - mountPath: /var/lib/postgresql/data
+              name: pgdata
+      volumes:
+        - name: pgdata
+          persistentVolumeClaim:
+            claimName: postgres-pvc
+
+---
+# =============================
+# Service PostgreSQL (ClusterIP)
+# =============================
+apiVersion: v1
+kind: Service
+metadata:
+  name: db-service
+spec:
+  selector:
+    app: db-postgres
+  ports:
+    - port: 5433
+      targetPort: 5433
+
+---
+# =============================
+# Deployment Backend
+# =============================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: back-abracadabra
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: back-abracadabra
+  template:
+    metadata:
+      labels:
+        app: back-abracadabra
+    spec:
+      containers:
+        - name: backend
+          image: ghcr.io/milagrosguillot/back-abracadabra:v1
+          ports:
+            - containerPort: 3001
+          env:
+            - name: DB_HOST
+              value: "db-service"
+            - name: DB_PORT
+              value: "5433"
+            - name: DB_USER
+              value: "user"
+            - name: DB_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: secretos
+                  key: POSTGRES_PASSWORD
+            - name: DB_NAME
+              value: "abracadabra"
+            - name: PORT
+              value: "3001"
+            - name: CORS_ORIGIN
+              value: "http://frontend.k3s.local"
+
+---
+# =============================
+# Service Backend (ClusterIP)
+# =============================
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-service
+spec:
+  type: ClusterIP
+  selector:
+    app: back-abracadabra
+  ports:
+    - port: 8080
+      targetPort: 3001
+
+---
+# =============================
+# Deployment Frontend
+# =============================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: front-abracadabra
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: front-abracadabra
+  template:
+    metadata:
+      labels:
+        app: front-abracadabra
+    spec:
+      containers:
+        - name: frontend
+          image: ghcr.io/milagrosguillot/front-abracadabra:v1
+          ports:
+            - containerPort: 3000
+          env:
+            - name: NEXT_PUBLIC_API_URL
+              value: "http://backend.k3s.local/frases"
+
+---
+# =============================
+# Service Frontend (ClusterIP)
+# =============================
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-service
+spec:
+  type: ClusterIP
+  selector:
+    app: front-abracadabra
+  ports:
+    - port: 80
+      targetPort: 3000
+
+---
+# =============================
+# Ingress para Traefik (k3s)
+# =============================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: abracadabra-ingress
+spec:
+  rules:
+    - host: frontend.k3s.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend-service
+                port:
+                  number: 80
+
+    - host: backend.k3s.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: backend-service
+                port:
+                  number: 8080
