@@ -16,6 +16,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
+      # Crear el username en minúsculas
+      - name: Convert actor to lowercase
+        id: vars
+        run: echo "actor_lower=$(echo '${{ github.actor }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
@@ -23,18 +28,20 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # BACKEND
       - name: Build backend image
         run: |
-          docker build -t ghcr.io/${{ github.actor }}/back-abracadabra:latest ./backend
+          docker build -t ghcr.io/${{ steps.vars.outputs.actor_lower }}/back-abracadabra:latest ./backend
 
       - name: Push backend
         run: |
-          docker push ghcr.io/${{ github.actor }}/back-abracadabra:latest
+          docker push ghcr.io/${{ steps.vars.outputs.actor_lower }}/back-abracadabra:latest
 
+      # FRONTEND
       - name: Build frontend image
         run: |
-          docker build -t ghcr.io/${{ github.actor }}/front-abracadabra:latest ./frontend
+          docker build -t ghcr.io/${{ steps.vars.outputs.actor_lower }}/front-abracadabra:latest ./frontend
 
       - name: Push frontend
         run: |
-          docker push ghcr.io/${{ github.actor }}/front-abracadabra:latest
+          docker push ghcr.io/${{ steps.vars.outputs.actor_lower }}/front-abracadabra:latest
