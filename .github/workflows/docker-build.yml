@@ -28,8 +28,8 @@ jobs:
         run: |
           docker build \
             -t ghcr.io/milagrosguillot/back-abracadabra:latest \
-            -f backend/Dockerfile \
-            .
+            -f backend/Dockerfile .
+
 
       - name: Push Docker Image
         run: |
