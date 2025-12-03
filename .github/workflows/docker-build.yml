@@ -1,32 +1,35 @@
-name: Deploy Backend
-
-permissions:
-  contents: read
-  packages: write
+name: Docker Backend CI for GHCR
 
 on:
   push:
-    branches: [ "main" ]
+    branches:
+      - main
 
 jobs:
-  build:
+  build-and-push:
     runs-on: ubuntu-latest
 
+    permissions:
+      packages: write
+      contents: read
+
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v3
 
       - name: Login to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v2
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build image
+      - name: Build Backend Docker Image
         run: |
-          docker build -t ghcr.io/milagrosguillot/back-abracadabra:latest .
+          docker build \
+            -t ghcr.io/milagrosguillot/back-abracadabra:latest \
+            -f backend/Dockerfile
 
-      - name: Push image
+      - name: Push Docker Image
         run: |
           docker push ghcr.io/milagrosguillot/back-abracadabra:latest
