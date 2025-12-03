@@ -33,7 +33,7 @@ jobs:
             -t ghcr.io/milagrosguillot/back-abracadabra:latest \
             -f backend/Dockerfile backend/
 
-      - name: Push Backend Image
+      - name: Push Backend Imagee
         run: |
           docker push ghcr.io/milagrosguillot/back-abracadabra:latest
 
